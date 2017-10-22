@@ -43,61 +43,41 @@ if __name__=='__main__':
 
 	print('> Data Loaded. Compiling...')
 
-	lstm_model = lstm.build_model([1, seq_len, 100, 1])
-	cnn1_model = cnn_batchnorm_lstm.build_model([1, seq_len, 100, 1], 1)
-	cnn2_model = cnn_batchnorm_lstm.build_model([1, seq_len, 100, 1], 2)
-	cnn3_model = cnn_batchnorm_lstm.build_model([1, seq_len, 100, 1], 3)
+	#lstm_model = lstm.build_model([1, seq_len, 100, 1])
+	model_layers = [1, 2, 3, 4]
+	cnn_models = [
+			cnn_batchnorm_lstm.build_model([1, seq_len, 100, 1], x) for x in model_layers
+		]
+	[model.fit(
+	    X_train,
+	    y_train,
+	    batch_size=512,
+	    nb_epoch=epochs,
+	    validation_split=0.05)
+		for model in cnn_models
+	]
 
-	lstm_model.fit(
-	    X_train,
-	    y_train,
-	    batch_size=512,
-	    nb_epoch=epochs,
-	    validation_split=0.05)
-	cnn1_model.fit(
-	    X_train,
-	    y_train,
-	    batch_size=512,
-	    nb_epoch=epochs,
-	    validation_split=0.05)
-	cnn2_model.fit(
-	    X_train,
-	    y_train,
-	    batch_size=512,
-	    nb_epoch=epochs,
-	    validation_split=0.05)
-	cnn3_model.fit(
-	    X_train,
-	    y_train,
-	    batch_size=512,
-	    nb_epoch=epochs,
-	    validation_split=0.05)
-
-	lstm_predictions = dataload.predict_sequences_multiple(lstm_model, X_test, seq_len, seq_len)
-	cnn1_predictions = dataload.predict_sequences_multiple(cnn1_model, X_test, seq_len, seq_len)
-	cnn2_predictions = dataload.predict_sequences_multiple(cnn2_model, X_test, seq_len, seq_len)
-	cnn3_predictions = dataload.predict_sequences_multiple(cnn3_model, X_test, seq_len, seq_len)
+	#lstm_predictions = dataload.predict_sequences_multiple(lstm_model, X_test, seq_len, seq_len)
+	cnn_predictions = [dataload.predict_sequences_multiple(model, X_test, seq_len, seq_len)
+		for model in cnn_models]
 	#predictions = dataload.predict_sequence_full(model, X_test, seq_len)
 	#predictions = dataload.predict_point_by_point(model, X_test)        
 
-	lstm_score = lstm_model.evaluate(X_test, y_test, verbose=0)
-	cnn1_score = lstm_model.evaluate(X_test, y_test, verbose=0)
-	cnn2_score = lstm_model.evaluate(X_test, y_test, verbose=0)
-	cnn3_score = lstm_model.evaluate(X_test, y_test, verbose=0)
+	#lstm_score = lstm_model.evaluate(X_test, y_test, verbose=0)
+	cnn_scores = [model.evaluate(X_test, y_test, verbose=0)
+			for model in cnn_models]
 
-	print('LSTM')
-	print(lstm_score)
+	#print('LSTM')
+	#print(lstm_score)
 	#print('Test loss: ', lstm_score[0])
 	#print('Test accuracy: ', lstm_score[1])
-	print('\nCNN 1')
-	print(cnn1_score)
-	print('\nCNN 2')
-	print(cnn2_score)
-	print('\nCNN 3')
-	print(cnn3_score)
+	for l in model_layers:
+		print('\nCNN ', l)
+		print(cnn_scores[l-1])
 	#print('Test loss: ', cnn_score[0])
 	#print('Test accuracy: ', cnn_score[1])
 
 	print('Training duration (s) : ', time.time() - global_start_time)
-	plot_results_multiple([(lstm_predictions, 'LSTM'), (cnn1_predictions, 'CNN 1'), (cnn2_predictions, 'CNN 2'), (cnn3_predictions, 'CNN 3')], y_test, seq_len)
+	cnn_plots = [(cnn_predictions[l-1], 'CNN {}'.format(l)) for l in model_layers]
+	plot_results_multiple(cnn_plots, y_test, seq_len)
 	#plot_results(predictions, y_test)
