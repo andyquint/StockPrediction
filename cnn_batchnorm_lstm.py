@@ -16,12 +16,12 @@ warnings.filterwarnings("ignore") #Hide messy Numpy warnings
 def build_model(layers, cnn_layers):
 	# parameters obtained from stock_model.py in Convolutional Neural Stock Market Technical Analyser
 	dropout = 0.5
-	conv_size = 9
 	conv_stride = 1
-	ksize = 2
+	ksize = 5
 	pool_stride = 2
-	filter_num = 64
+	filter_num = 128
 	padding = "same"
+	lstm_units = 64
 
 	model = Sequential()
 
@@ -52,20 +52,19 @@ def build_model(layers, cnn_layers):
 			pool_size=2))
 
 	model.add(LSTM(
-		#32,
-		output_dim = layers[1], # 50
+		#output_dim = layers[1], # 50
+		lstm_units,
 		return_sequences=True))
 	model.add(Dropout(dropout/2))
 
 	model.add(LSTM(
-		#16,
-		#layers[2], # 100
-		layers[1]*2, # 100
+		#layers[1]*2, # 100
+		lstm_units,
 		return_sequences=False))
 	model.add(Dropout(dropout))
 
 	model.add(Dense(
-		output_dim = layers[3])) # 1
+		output_dim = 1)) # Linear output
 	model.add(Activation("linear"))
 	
 	start = time.time()

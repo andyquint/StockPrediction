@@ -13,7 +13,6 @@ def plot_results(predicted_data, true_data):
 	plt.show()
 
 def plot_results_multiple(predicted_data, true_data, prediction_len):
-	#fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
 	fig, axs = plt.subplots(len(predicted_data), 1, sharex=True)
 	for x in range(len(predicted_data)):
 		axs[x].plot(true_data, label='True Data')
@@ -23,35 +22,29 @@ def plot_results_multiple(predicted_data, true_data, prediction_len):
 			axs[x].plot(padding + data, label='Prediction')
 			#plt.legend()
 		axs[x].set_title(predicted_data[x][1])
-	#ax2.plot(true_data, label='True Data')
-	#for i, data in enumerate(predicted_data[1][0]):
-		#padding = [None for p in range(i * prediction_len)]
-		#ax2.plot(padding + data, label='Prediction')
-		##plt.legend()
-	#ax2.set_title(predicted_data[1][1])
 	plt.show()
 
 if __name__=='__main__':
 	global_start_time = time.time()
-	#epochs  = 1
 	epochs  = 100
-	seq_len = 40
+	seq_len = 100
 
 	print('> Loading data... ')
 
 	X_train, y_train, X_test, y_test = dataload.load_data('daily_spx.csv', seq_len, True)
+	#X_train, y_train, X_test, y_test = dataload.load_sin_data(seq_len, False)
 
 	print('> Data Loaded. Compiling...')
 
 	#lstm_model = lstm.build_model([1, seq_len, 100, 1])
 	model_layers = [1, 2, 3, 4]
 	cnn_models = [
-			cnn_batchnorm_lstm.build_model([1, seq_len, 100, 1], x) for x in model_layers
+			cnn_batchnorm_lstm.build_model([1, seq_len, 100], x) for x in model_layers
 		]
 	[model.fit(
 	    X_train,
 	    y_train,
-	    batch_size=512,
+	    batch_size=64,
 	    nb_epoch=epochs,
 	    validation_split=0.05)
 		for model in cnn_models
