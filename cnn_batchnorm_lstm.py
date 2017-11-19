@@ -13,15 +13,15 @@ from keras.layers.pooling import MaxPooling1D
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' #Hide messy TensorFlow warnings
 warnings.filterwarnings("ignore") #Hide messy Numpy warnings
 
-def build_model(layers, cnn_layers):
+def build_model(layers, cnn_layers, kernel_size=5):
 	# parameters obtained from stock_model.py in Convolutional Neural Stock Market Technical Analyser
 	dropout = 0.5
 	conv_stride = 1
-	ksize = 5
-	pool_stride = 2
+	ksize = kernel_size
+	pool_size = 2
 	filter_num = 128
 	padding = "same"
-	lstm_units = 64
+	lstm_units = 100
 
 	model = Sequential()
 
@@ -36,7 +36,7 @@ def build_model(layers, cnn_layers):
 	model.add(Activation('relu'))
 	
 	model.add(MaxPooling1D(
-		pool_size=2))
+		pool_size=pool_size))
 
 	for x in range(1, cnn_layers):
 		model.add(Conv1D(
@@ -49,7 +49,7 @@ def build_model(layers, cnn_layers):
 		model.add(Activation('relu'))
 		
 		model.add(MaxPooling1D(
-			pool_size=2))
+			pool_size=pool_size))
 
 	model.add(LSTM(
 		#output_dim = layers[1], # 50
