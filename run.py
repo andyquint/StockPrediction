@@ -3,6 +3,10 @@ import cnn_batchnorm_lstm
 import time
 import matplotlib.pyplot as plt
 import dataload
+from datetime import datetime
+import os
+from sklearn.model_selection import GridSearchCV
+from keras.callbacks import EarlyStopping
 
 def plot_results(predicted_data, true_data):
     fig = plt.figure(facecolor='white')
@@ -14,39 +18,47 @@ def plot_results(predicted_data, true_data):
 
 def plot_results_multiple(predicted_data, true_data, prediction_len):
     fig, axs = plt.subplots(len(predicted_data), 1, sharex=True)
-    for x in range(len(predicted_data)):
-        axs[x].plot(true_data, label='True Data')
-        # Pad the list of predictions to shift it in the graph to it's correct start
-        for i, data in enumerate(predicted_data[x][0]):
+    if (len(predicted_data) > 1):
+        for x in range(len(predicted_data)):
+            axs[x].plot(true_data, label='True Data')
+            # Pad the list of predictions to shift it in the graph to it's correct start
+            for i, data in enumerate(predicted_data[x][0]):
+                padding = [None for p in range(i * prediction_len)]
+                axs[x].plot(padding + data, label='Prediction')
+            axs[x].set_title(predicted_data[x][1])
+    else:
+        axs.plot(true_data, label='True Data')
+        for i, data in enumerate(predicted_data[0][0]):
             padding = [None for p in range(i * prediction_len)]
-            axs[x].plot(padding + data, label='Prediction')
-        axs[x].set_title(predicted_data[x][1])
+            axs.plot(padding + data, label='Prediction')
+        axs.set_title(predicted_data[0][1])
     plt.show()
 
 if __name__=='__main__':
     global_start_time = time.time()
     epochs  = 100
     seq_len = 100
-    predict_len = 50
+    predict_len = 14
 
     print('> Loading data... ')
 
     X_train, y_train, X_test, y_test = dataload.load_data('daily_spx.csv', seq_len, True)
-    #X_train, y_train, X_test, y_test = dataload.load_sin_data(seq_len, False)
 
     print('> Data Loaded. Compiling...')
 
-    #lstm_model = lstm.build_model([1, seq_len, 100, 1])
-    kernel_sizes = [10,20,30]
+    kernel_sizes = [14]
+    stride_lengths = [2, 4]
     cnn_models = [
             cnn_batchnorm_lstm.build_model([1, seq_len, 100], 3, ksize) for ksize in kernel_sizes
             ]
+    early_stopping = EarlyStopping(patience=2)
     [model.fit(
         X_train,
         y_train,
         batch_size=64,
         nb_epoch=epochs,
-        validation_split=0.05)
+        validation_split=0.05,
+        callbacks=[early_stopping])
         for model in cnn_models
         ]
 
@@ -74,3 +86,9 @@ if __name__=='__main__':
     print('Training duration (s) : ', time.time() - global_start_time)
     cnn_plots = [(cnn_predictions[i], 'CNN {}'.format(kernel_sizes[i])) for i in range(len(kernel_sizes))]
     plot_results_multiple(cnn_plots, y_test, predict_len)
+
+    now = datetime.now()
+    try:
+        os.makedirs(now)
+    except OSError:
+        pass
