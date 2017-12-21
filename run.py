@@ -5,8 +5,10 @@ import matplotlib.pyplot as plt
 import dataload
 from datetime import datetime
 import os
-from sklearn.model_selection import GridSearchCV
+from keras.wrappers.scikit_learn import KerasRegressor
+from sklearn.model_selection import GridSearchCV, PredefinedSplit
 from keras.callbacks import EarlyStopping
+import pandas as pd
 
 def plot_results(predicted_data, true_data):
     fig = plt.figure(facecolor='white')
@@ -36,9 +38,10 @@ def plot_results_multiple(predicted_data, true_data, prediction_len):
 
 if __name__=='__main__':
     global_start_time = time.time()
+    batch_size = 64
     epochs  = 100
-    seq_len = 100
-    predict_len = 14
+    seq_len = 50
+    predict_len = 20
 
     print('> Loading data... ')
 
@@ -47,11 +50,33 @@ if __name__=='__main__':
     print('> Data Loaded. Compiling...')
 
     kernel_sizes = [14]
-    stride_lengths = [2, 4]
-    cnn_models = [
-            cnn_batchnorm_lstm.build_model([1, seq_len, 100], 3, ksize) for ksize in kernel_sizes
-            ]
     early_stopping = EarlyStopping(patience=2)
+    fit_params = dict(callbacks=[early_stopping])
+    model = KerasRegressor(build_fn=cnn_batchnorm_lstm.build_model, batch_size=batch_size, validation_split = 0.10)
+    param_grid=dict(
+            layers=[(1, seq_len)], 
+            epochs=[epochs], 
+            cnn_layers=[3],
+            lstm_units=[200,300],
+            kernel_size=[15,30],
+            stride_1=[3,4]
+            )
+    grid = GridSearchCV(estimator=model, param_grid=param_grid)
+    grid_result = grid.fit(X_train, y_train, callbacks=[early_stopping])
+    print(grid.best_params_)
+    print(grid_result)
+
+    results = pd.DataFrame(grid.cv_results_)
+    results.sort_values(by='rank_test_score', inplace=True)
+
+    print(results.to_string())
+
+    results.to_csv('results_{}.csv'.format(int(datetime.now().timestamp())))
+
+    exit()
+    cnn_models = [
+            cnn_batchnorm_lstm.build_model([1, seq_len], 3, ksize) for ksize in kernel_sizes
+            ]
     [model.fit(
         X_train,
         y_train,
@@ -86,9 +111,3 @@ if __name__=='__main__':
     print('Training duration (s) : ', time.time() - global_start_time)
     cnn_plots = [(cnn_predictions[i], 'CNN {}'.format(kernel_sizes[i])) for i in range(len(kernel_sizes))]
     plot_results_multiple(cnn_plots, y_test, predict_len)
-
-    now = datetime.now()
-    try:
-        os.makedirs(now)
-    except OSError:
-        pass
