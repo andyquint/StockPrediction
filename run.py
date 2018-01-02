@@ -18,7 +18,7 @@ def plot_results(predicted_data, true_data):
     plt.legend()
     plt.show()
 
-def plot_results_multiple(predicted_data, true_data, prediction_len):
+def plot_results_multiple(predicted_data, true_data, prediction_len, fig_path=None):
     fig, axs = plt.subplots(len(predicted_data), 1, sharex=True)
     if (len(predicted_data) > 1):
         for x in range(len(predicted_data)):
@@ -34,6 +34,8 @@ def plot_results_multiple(predicted_data, true_data, prediction_len):
             padding = [None for p in range(i * prediction_len)]
             axs.plot(padding + data, label='Prediction')
         axs.set_title(predicted_data[0][1])
+    if (fig_path is not None):
+        fig.savefig(fig_path)
     plt.show()
 
 if __name__=='__main__':
@@ -45,10 +47,12 @@ if __name__=='__main__':
 
     print('> Loading data... ')
 
-    X_train, y_train, X_test, y_test = dataload.load_data('daily_spx.csv', seq_len, True)
+    #X_train, y_train, X_test, y_test = dataload.load_data('daily_spx.csv', seq_len, True)
+    X_train, y_train, X_test, y_test = dataload.load_sin_data(seq_len)
 
     print('> Data Loaded. Compiling...')
 
+    # Grid search parameters
     kernel_sizes = [14]
     early_stopping = EarlyStopping(patience=2)
     fit_params = dict(callbacks=[early_stopping])
@@ -61,53 +65,46 @@ if __name__=='__main__':
             kernel_size=[15,30],
             stride_1=[3,4]
             )
+
+    # Grid search
     grid = GridSearchCV(estimator=model, param_grid=param_grid)
     grid_result = grid.fit(X_train, y_train, callbacks=[early_stopping])
+    print('Best parameters:')
     print(grid.best_params_)
-    print(grid_result)
 
     results = pd.DataFrame(grid.cv_results_)
     results.sort_values(by='rank_test_score', inplace=True)
 
     print(results.to_string())
 
-    results.to_csv('results_{}.csv'.format(int(datetime.now().timestamp())))
+    # Build top 3 models
+    idx = 0
+    top_models = []
+    for index, row in results.iterrows():
+        top_models.append(
+                cnn_batchnorm_lstm.build_model(row['param_layers'], row['param_cnn_layers'], row['param_kernel_size'])
+            )
+        idx = idx + 1
+        if idx > 2:
+            break
 
-    exit()
-    cnn_models = [
-            cnn_batchnorm_lstm.build_model([1, seq_len], 3, ksize) for ksize in kernel_sizes
-            ]
-    [model.fit(
-        X_train,
-        y_train,
-        batch_size=64,
-        nb_epoch=epochs,
-        validation_split=0.05,
-        callbacks=[early_stopping])
-        for model in cnn_models
-        ]
+    for model in top_models:
+        model.fit(
+                X_train,
+                y_train,
+                batch_size=64,
+                nb_epoch=epochs,
+                validation_split=0.05,
+                callbacks=[early_stopping]
+                )
 
-    for i in range(len(kernel_sizes)):
-        cnn_models[i].save('model-ksize-{}.h5'.format(kernel_sizes[i]))
+    predictions = [dataload.predict_sequences_multiple(model, X_test, seq_len, predict_len)
+            for model in top_models]
+    scores = [model.evaluate(X_test, y_test, verbose=0)
+            for model in top_models]
 
-    #lstm_predictions = dataload.predict_sequences_multiple(lstm_model, X_test, seq_len, seq_len)
-    cnn_predictions = [dataload.predict_sequences_multiple(model, X_test, seq_len, predict_len)
-            for model in cnn_models]
-    #predictions = dataload.predict_sequence_full(model, X_test, seq_len)
-    #predictions = dataload.predict_point_by_point(model, X_test)        
-
-    #lstm_score = lstm_model.evaluate(X_test, y_test, verbose=0)
-    cnn_scores = [model.evaluate(X_test, y_test, verbose=0)
-            for model in cnn_models]
-
-    #print('LSTM')
-    #print(lstm_score)
-    #print('Test loss: ', lstm_score[0])
-    #print('Test accuracy: ', lstm_score[1])
-    for i in range(len(kernel_sizes)):
-        print('\nKernel size {}'.format(kernel_sizes[i]))
-        print(cnn_scores[i])
-
-    print('Training duration (s) : ', time.time() - global_start_time)
-    cnn_plots = [(cnn_predictions[i], 'CNN {}'.format(kernel_sizes[i])) for i in range(len(kernel_sizes))]
-    plot_results_multiple(cnn_plots, y_test, predict_len)
+    # Save results
+    results_fname = 'results_{}'.format(int(datetime.now().timestamp()))
+    results.to_csv('{}.csv'.format(results_fname))
+    top_model_plots = [(predictions[i], 'Model {}'.format(i+1)) for i in range(len(predictions))]
+    plot_results_multiple(top_model_plots, y_test, predict_len, fig_path = '{}.pdf'.format(results_fname))

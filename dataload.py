@@ -34,7 +34,8 @@ def load_data(filename, seq_len, normalise_window):
 
 def load_sin_data(seq_len, normalise_window=True):
 	x_range = range(8000)
-	matrix = [math.sin(x*0.05)*math.sin(x*0.15*x)*math.sin(x*0.35)+2 for x in x_range]
+	#matrix = [math.sin(x*0.05)*math.sin(x*0.15*x)*math.sin(x*0.35)+2 for x in x_range]
+	matrix = [math.sin(x*0.05)+2 for x in x_range]
 
 	sequence_length = seq_len + 1
 	result = []
