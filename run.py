@@ -1,5 +1,6 @@
 import lstm
 import cnn_batchnorm_lstm
+import multiple_branch_cnn
 import time
 import matplotlib.pyplot as plt
 import dataload
@@ -40,42 +41,62 @@ if __name__=='__main__':
     predict_len = 10
 
     # description: several-word description of the purpose of the run
-    description = 'stock_kernel'
+    description = 'stock_multb_compare_merge'
     results_fname = '{}_{}'.format(description, int(datetime.now().timestamp()))
 
-    early_stopping = EarlyStopping(patience=10)
+    early_stopping = EarlyStopping(patience=20)
     tensorboard = TensorBoard(log_dir='tensorboard', write_grads=True)
 
     for seq_len in seq_lens:
         print('Seq len: {}'.format(seq_len))
         print('> Loading data... ')
 
-        X_train, y_train, X_test, y_test = dataload.load_data('daily_spx.csv', seq_len, normalise_window=True, smoothing=True, smoothing_window_length=7, smoothing_polyorder=3)
+        X_train, y_train, X_test, y_test = dataload.load_data('daily_spx.csv', seq_len, normalise_window=True, smoothing=False, smoothing_window_length=5, smoothing_polyorder=3)
         #X_train, y_train, X_test, y_test = dataload.load_sin_data(seq_len, normalise_window=True)
 
         print('> Data Loaded. Compiling...')
 
         # Grid search parameters
-        #step_size = int(seq_len/7)
-        #kernel_sizes = list(range(step_size,seq_len+1,step_size))
-        kernel_sizes = [3,7,10,14]
+        kernel_sizes = [5]
+        step_sizes = [4]
+        single_branch = False
         stride = [3]
-        #lstm_units = [50,100,200,300,400,500]
-        lstm_units = [400]
-        model = KerasRegressor(build_fn=cnn_batchnorm_lstm.build_model, validation_split = 0.20)
+        lstm_units = [200,400]
+        branches = [1,3]
+        model = False
+        if (single_branch):
+            model = KerasRegressor(build_fn=cnn_batchnorm_lstm.build_model, validation_split = 0.20)
+        else:
+            model = KerasRegressor(build_fn=multiple_branch_cnn.build_model, validation_split = 0.20)
         cnn_layers = [3]
         filter_nums=[128]
         batch_size = [32]
-        param_grid=dict(
-                layers=[(1, seq_len)], 
-                epochs=[epochs], 
-                cnn_layers=cnn_layers,
-                lstm_units=lstm_units,
-                kernel_size=kernel_sizes,
-                stride_1=stride,
-                filter_num=filter_nums,
-                batch_size=batch_size
-                )
+        single_lstm = [True]
+        cat_branches = [True]
+        param_grid = {}
+        if (single_branch):
+            param_grid=dict(
+                    layers=[(1, seq_len)], 
+                    epochs=[epochs], 
+                    cnn_layers=cnn_layers,
+                    lstm_units=lstm_units,
+                    kernel_size=kernel_sizes,
+                    stride_1=stride,
+                    filter_num=filter_nums,
+                    batch_size=batch_size
+                    )
+        else:
+            param_grid = dict(
+                    layers = [(1, seq_len)],
+                    epochs = [epochs],
+                    ksize1 = kernel_sizes,
+                    step_size = step_sizes,
+                    batch_size = batch_size,
+                    lstm_units = lstm_units,
+                    single_lstm_layer = single_lstm,
+                    num_branches = branches,
+                    concat = cat_branches
+                    )
 
         # Grid search
         grid = GridSearchCV(estimator=model, param_grid=param_grid, scoring='neg_mean_squared_error', cv=5)
@@ -92,19 +113,24 @@ if __name__=='__main__':
         idx = 0
         top_models = []
         for index, row in results.iterrows():
-            top_models.append(
-                    cnn_batchnorm_lstm.build_model(row['param_layers'], row['param_cnn_layers'], row['param_kernel_size'])
-                )
+            top_model = False
+            if (single_branch):
+                top_model = cnn_batchnorm_lstm.build_model(row['param_layers'], row['param_cnn_layers'], row['param_kernel_size'])
+            else:
+                top_model = multiple_branch_cnn.build_model(row['param_layers'], row['param_ksize1'], row['param_step_size'], row['param_lstm_units'], row['param_single_lstm_layer'])
+            top_models.append(top_model)
             top_models[-1].batch_size = row['param_batch_size']
             idx = idx + 1
             if idx > 2:
                 break
 
+        early_stopping = EarlyStopping(patience=20)
+        fit_models = []
         for i in reversed(range(len(top_models))):
             model = top_models[i]
             callbacks = []
             if (i == 0):
-                callbacks = [early_stopping, tensorboard]
+                callbacks = [early_stopping]
             else:
                 callbacks = [early_stopping]
             model.fit(
@@ -112,9 +138,10 @@ if __name__=='__main__':
                     y_train,
                     batch_size=model.batch_size,
                     nb_epoch=epochs,
-                    validation_split=0.05,
+                    validation_split=0.10,
                     callbacks=[early_stopping, tensorboard]
                     )
+            fit_models.append(model)
 
         predictions = [dataload.predict_sequences_multiple(model, X_test, seq_len, predict_len)
                 for model in top_models]
@@ -128,3 +155,7 @@ if __name__=='__main__':
         results.to_csv('{0}/{1}/results.csv'.format(results_fname, folder_name))
         top_model_plots = [(predictions[i], 'Model {}'.format(i+1)) for i in range(len(predictions))]
         plot_results_multiple(top_model_plots, y_test, predict_len, fig_path = '{0}/{1}/plots.pdf'.format(results_fname, folder_name))
+        index = 1
+        for model in fit_models:
+            model.save('{}/{}/model-{}.h5'.format(results_fname, folder_name, index))
+            index = index + 1
